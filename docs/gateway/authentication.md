@@ -157,6 +157,33 @@ clawdbot models status
 Run `clawdbot models status` to confirm which profile is expiring. If the profile
 is `anthropic:claude-cli`, rerun `claude setup-token`.
 
+## Alternative: OpenRouter
+
+If you encounter "This credential is only authorized for use with Claude Code"
+errors, or want to use free/cheaper models, consider OpenRouter:
+
+**Benefits:**
+- Access to 100+ models through a single API key
+- Free tier models (Llama 3.3 70B, DeepSeek R1)
+- Pay-as-you-go pricing (often cheaper than direct APIs)
+- No OAuth required
+
+**Setup:**
+```json
+{
+  "env": {
+    "OPENROUTER_API_KEY": "sk-or-v1-..."
+  },
+  "agent": {
+    "model": {
+      "primary": "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+    }
+  }
+}
+```
+
+See [OpenRouter Integration](/gateway/openrouter) for full setup guide.
+
 ## Requirements
 
 - Claude Max or Pro subscription (for `claude setup-token`)
