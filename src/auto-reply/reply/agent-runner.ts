@@ -19,7 +19,11 @@ import {
   resolveSandboxConfigForAgent,
   resolveSandboxRuntimeStatus,
 } from "../../agents/sandbox.js";
-import { hasNonzeroUsage, type NormalizedUsage } from "../../agents/usage.js";
+import {
+  calculateCost,
+  hasNonzeroUsage,
+  type NormalizedUsage,
+} from "../../agents/usage.js";
 import type { ClawdbotConfig } from "../../config/config.js";
 import {
   loadSessionStore,
@@ -86,6 +90,47 @@ import { createTypingSignaler } from "./typing-mode.js";
 
 const BUN_FETCH_SOCKET_ERROR_RE = /socket connection was closed unexpectedly/i;
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
+
+/**
+ * Log usage to L36 dashboard widget (fire-and-forget).
+ * Posts token usage and cost data for aggregation in the L36 sidebar.
+ */
+function logUsageToL36(params: {
+  provider: string;
+  model: string;
+  usage: NormalizedUsage;
+  sessionKey?: string;
+  complexityLevel?: string;
+}): void {
+  const { provider, model, usage, sessionKey, complexityLevel } = params;
+  const apiUrl = process.env.L36_API_URL ?? "https://l36.com.au";
+  // Support both L36_API_KEY and CLAWDBOT_API_KEY (from Vault export)
+  const apiKey = process.env.L36_API_KEY ?? process.env.CLAWDBOT_API_KEY;
+  if (!apiKey) return;
+
+  const estimatedCost = calculateCost(usage, model);
+
+  fetch(`${apiUrl}/api/clawdbot/usage/log`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+    },
+    body: JSON.stringify({
+      provider,
+      model,
+      input_tokens: usage.input ?? 0,
+      output_tokens: usage.output ?? 0,
+      cache_read_tokens: usage.cacheRead ?? 0,
+      cache_write_tokens: usage.cacheWrite ?? 0,
+      estimated_cost: estimatedCost,
+      session_key: sessionKey,
+      complexity_level: complexityLevel,
+    }),
+  }).catch((err) => {
+    logVerbose(`L36 usage log failed: ${String(err)}`);
+  });
+}
 
 /**
  * Build provider-specific threading context for tool auto-injection.
@@ -1076,6 +1121,17 @@ export async function runReplyAgent(params: {
           logVerbose(`failed to persist model/context update: ${String(err)}`);
         }
       }
+    }
+
+    // Log usage to L36 dashboard widget (fire-and-forget)
+    if (hasNonzeroUsage(usage)) {
+      logUsageToL36({
+        provider: providerUsed,
+        model: modelUsed,
+        usage,
+        sessionKey,
+        complexityLevel: followupRun.run.thinkLevel,
+      });
     }
 
     const responseUsageEnabled =
