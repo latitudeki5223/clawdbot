@@ -20,7 +20,6 @@ import {
   resolveSandboxRuntimeStatus,
 } from "../../agents/sandbox.js";
 import {
-  calculateCost,
   hasNonzeroUsage,
   type NormalizedUsage,
 } from "../../agents/usage.js";
@@ -108,7 +107,8 @@ function logUsageToL36(params: {
   const apiKey = process.env.L36_API_KEY ?? process.env.CLAWDBOT_API_KEY;
   if (!apiKey) return;
 
-  const estimatedCost = calculateCost(usage, model);
+  // Cost estimation requires model catalog config - pass undefined for now
+  const estimatedCost = estimateUsageCost({ usage, cost: undefined });
 
   fetch(`${apiUrl}/api/clawdbot/usage/log`, {
     method: "POST",
@@ -758,8 +758,8 @@ export async function runReplyAgent(params: {
                 blockStreamingEnabled && opts?.onBlockReply
                   ? async (payload) => {
                       const { text, skip } = normalizeStreamingText(payload);
-                      const hasMedia = (payload.mediaUrls?.length ?? 0) > 0;
-                      if (skip && !hasMedia) return;
+                      const hasMediaPayload = (payload.mediaUrls?.length ?? 0) > 0;
+                      if (skip && !hasMediaPayload) return;
                       const taggedPayload = applyReplyTagsToPayload(
                         {
                           text,
