@@ -1292,6 +1292,8 @@ export type GatewayControlUiConfig = {
   enabled?: boolean;
   /** Optional base path prefix for the Control UI (e.g. "/clawdbot"). */
   basePath?: string;
+  /** Allowed browser origins for Control UI/WebChat websocket connections (e.g. ["https://control.example.com"]). */
+  allowedOrigins?: string[];
 };
 
 export type GatewayAuthMode = "token" | "password";

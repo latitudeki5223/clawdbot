@@ -133,6 +133,7 @@ import {
   type ResolvedGatewayAuth,
   resolveGatewayAuth,
 } from "./auth.js";
+import { checkBrowserOrigin } from "./origin-check.js";
 import {
   abortChatRunById,
   type ChatAbortControllerEntry,
@@ -161,6 +162,7 @@ import {
   validateConnectParams,
   validateRequestFrame,
 } from "./protocol/index.js";
+import { GATEWAY_CLIENT_IDS } from "./protocol/client-info.js";
 import { createBridgeHandlers } from "./server-bridge.js";
 import {
   type BridgeListConnectedFn,
@@ -1588,6 +1590,49 @@ export async function startGatewayServer(
             });
             close(1002, "protocol mismatch");
             return;
+          }
+
+          // CVE-2026-25253: WebSocket origin validation
+          // Check origin for Control UI and Webchat to prevent cross-origin token theft
+          const isControlUi = connectParams.client.id === GATEWAY_CLIENT_IDS.CONTROL_UI;
+          const isWebchat = isWebchatConnect(connectParams);
+          
+          if (isControlUi || isWebchat) {
+            const originCheck = checkBrowserOrigin({
+              requestHost,
+              origin: requestOrigin,
+              allowedOrigins: cfgAtStart.gateway?.controlUi?.allowedOrigins,
+            });
+            
+            if (!originCheck.ok) {
+              handshakeState = "failed";
+              const errorMessage =
+                "origin not allowed (open the Control UI from the gateway host or allow it in gateway.controlUi.allowedOrigins)";
+              
+              logWsControl.warn(
+                `origin blocked conn=${connId} remote=${remoteAddr ?? "?"} origin=${requestOrigin ?? "n/a"} host=${requestHost ?? "n/a"} reason=${originCheck.reason}`,
+              );
+              
+              setCloseCause("origin-mismatch", {
+                origin: requestOrigin ?? "n/a",
+                host: requestHost ?? "n/a",
+                reason: originCheck.reason,
+                client: connectParams.client.id,
+                clientDisplayName: connectParams.client.displayName,
+                mode: connectParams.client.mode,
+                version: connectParams.client.version,
+              });
+              
+              send({
+                type: "res",
+                id: frame.id,
+                ok: false,
+                error: errorShape(ErrorCodes.INVALID_REQUEST, errorMessage),
+              });
+              
+              close(1008, truncateCloseReason(errorMessage));
+              return;
+            }
           }
 
           const authResult = await authorizeGatewayConnect({
