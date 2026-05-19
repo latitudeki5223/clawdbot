@@ -1,5 +1,7 @@
 node_modules
 .env
+.mcp.json
+.claude/
 docker-compose.extra.yml
 dist
 *.bun-build
