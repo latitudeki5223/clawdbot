@@ -1,0 +1,142 @@
+================================================================================
+                HOME ASSISTANT SKILL SETUP - INSTALLATION SUMMARY
+================================================================================
+
+INSTALLATION STATUS: ✅ COMPLETE
+
+================================================================================
+1. SKILL INSTALLATION
+================================================================================
+
+Location: /home/admin/gen2-tony/skills/homeassistant/
+Source:   ClawdHub (https://clawdhub.com/dbhurley/homeassistant)
+Version:  1.0.0
+Slug:     homeassistant
+Status:   ✅ Installed and enabled
+
+Files:
+  - SKILL.md (2,401 bytes)
+
+================================================================================
+2. CONFIGURATION UPDATES
+================================================================================
+
+File: /home/admin/.clawdbot/clawdbot.json
+
+Environment Variables Added:
+  ✅ HA_URL: "http://homeassistant.tailscale-name.ts.net:8123" (placeholder)
+  ✅ HA_TOKEN: "YOUR_HA_LONG_LIVED_TOKEN_HERE" (placeholder)
+
+Skill Registry Entry Added:
+  ✅ "homeassistant": { "enabled": true }
+
+Existing Discord Integration:
+  ✅ Channel: #home-control (configured for home automation)
+  ✅ System Prompt: Instructs use of homeassistant skill for device ops
+  
+================================================================================
+3. SUPPORTED CAPABILITIES
+================================================================================
+
+Device Domains:
+  • switch.* — Smart plugs, generic switches
+  • light.* — Lights (Hue, LIFX, etc.)
+  • scene.* — Pre-configured scenes
+  • automation.* — Automations
+  • climate.* — Thermostats
+  • cover.* — Blinds, garage doors
+  • media_player.* — TVs, speakers
+  • sensor.* — Temperature, humidity, etc.
+
+Common Operations:
+  • Turn on/off switches and lights
+  • Set brightness and color for lights
+  • Trigger scenes
+  • Query device states
+  • Call any Home Assistant service
+
+================================================================================
+4. NEXT STEPS FOR USER
+================================================================================
+
+REQUIRED ACTIONS:
+
+1. Get Home Assistant Long-Lived Token:
+   - Open Home Assistant → Profile (user icon)
+   - Scroll to "Long-Lived Access Tokens"
+   - Click "Create Token"
+   - Copy the generated token
+   
+2. Update HA_URL in clawdbot.json:
+   Replace: http://homeassistant.tailscale-name.ts.net:8123
+   With:    Your actual Home Assistant URL or IP address
+   
+3. Update HA_TOKEN in clawdbot.json:
+   Replace: YOUR_HA_LONG_LIVED_TOKEN_HERE
+   With:    The long-lived token from step 1
+   
+4. Restart Clawdbot Gateway:
+   pkill -f clawdbot
+   # Then restart via app or manually
+   
+5. Test Configuration:
+   - Run curl test commands (see setup guide)
+   - Send test message in #home-control Discord channel
+
+================================================================================
+5. SECURITY CONSIDERATIONS
+================================================================================
+
+✓ Using placeholder tokens/URLs (user will fill in real values)
+✓ Long-lived tokens stored in local config only
+✓ Recommend using Tailscale for secure remote access
+✓ Consider HTTPS for production Home Assistant instances
+
+================================================================================
+6. DOCUMENTATION CREATED
+================================================================================
+
+Complete setup guide: /tmp/homeassistant-setup.md
+
+Includes:
+  • Installation verification
+  • Step-by-step configuration instructions
+  • Supported device types and command examples
+  • Verification and testing procedures
+  • Troubleshooting guide
+  • Security notes and best practices
+
+================================================================================
+7. VERIFICATION CHECKLIST
+================================================================================
+
+Installation:
+  ✅ Skill downloaded from ClawdHub
+  ✅ Skill installed at correct location
+  ✅ SKILL.md present and readable
+  ✅ Skill enabled in clawdbot.json
+
+Configuration:
+  ✅ HA_URL added to env section (placeholder)
+  ✅ HA_TOKEN added to env section (placeholder)
+  ✅ homeassistant added to skills.entries
+  ✅ homeassistant.enabled set to true
+  ✅ JSON syntax valid
+
+Integration:
+  ✅ Discord #home-control channel configured
+  ✅ System prompt set for home automation
+  ✅ Existing infrastructure supports the skill
+
+================================================================================
+
+Setup Guide Location: /tmp/homeassistant-setup.md
+
+User should follow this file for:
+  1. Retrieving their Home Assistant token
+  2. Updating the placeholder configuration
+  3. Restarting the gateway
+  4. Testing the integration
+  5. Troubleshooting if needed
+
+================================================================================

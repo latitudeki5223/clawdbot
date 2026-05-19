@@ -1,0 +1,345 @@
+# Frigate Configuration Example: Dual-Webhook Setup
+#
+# This example shows how to configure Frigate to send events via:
+# 1. Discord Webhooks (direct image delivery) for high-confidence detections
+# 2. Clawdbot Webhooks (optional AI analysis) for low-confidence/unknown objects
+#
+# References:
+# - Frigate Docs: https://frigate.video/docs/
+# - Clawdbot Webhooks: https://docs.clawd.bot/automation/webhook
+# - Discord Webhooks: https://discord.com/developers/docs/resources/webhook
+
+# ============================================================================
+# GENERAL FRIGATE CONFIG
+# ============================================================================
+logger:
+  level: info
+
+# Camera hardware acceleration (adjust for your system)
+ffmpeg:
+  hwaccel_args: preset-vaapi  # or preset-nvidia, preset-rpi4, etc.
+
+# Object detection
+detectors:
+  coral:
+    type: edgetpu
+    device: auto
+
+# ============================================================================
+# NOTIFICATION SYSTEM (Main Focus)
+# ============================================================================
+# Frigate notifications route events to external services via webhooks.
+# This example uses two distinct paths:
+#
+# Path 1: High-confidence → Discord (direct image embed)
+# Path 2: Low-confidence/unknown → Clawdbot (for AI analysis)
+
+notifications:
+  # Define notification services for different object types and conditions
+  #
+  # Note: Frigate's notification system currently posts to a fixed endpoint.
+  # To route different events differently, use conditions or multiple cameras.
+
+  # Service 1: Discord webhook for immediate image delivery
+  discord_person:
+    type: webhook
+    method: POST
+    headers:
+      Content-Type: application/json
+    # High-confidence person detection webhook
+    # Create this in Discord: Channel → Settings → Integrations → Webhooks
+    webhook_url: "https://discord.com/api/webhooks/1234567890123456789/abcdefghijklmnopqrstuvwxyz_1234567890ABCDEFGHIJ_KlmnopQRstuvWxyzABCDef1234567890"
+
+  # Service 2: Clawdbot webhook for optional AI analysis
+  clawdbot_analysis:
+    type: webhook
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+    # Clawdbot gateway webhook endpoint (local or remote)
+    webhook_url: "http://localhost:18789/hooks/frigate"
+    # Or if remote:
+    # webhook_url: "https://your-clawdbot.example.com/hooks/frigate"
+
+# ============================================================================
+# CAMERA CONFIGURATION
+# ============================================================================
+# Each camera has a `motion` and `objects` section that can define
+# when notifications are triggered.
+
+cameras:
+  # Example 1: Outdoor camera - person detection with dual-webhook routing
+  front_door:
+    ffmpeg:
+      inputs:
+        - path: rtsp://user:pass@192.168.1.100/stream
+          roles:
+            - detect
+            - record
+
+    # Motion detection settings
+    motion:
+      mask: []
+
+    # Object detection thresholds and notification routing
+    objects:
+      track:
+        - person
+        - car
+        - dog
+
+      # Thresholds for each object type
+      # Higher threshold = only high-confidence detections post
+      filters:
+        person:
+          min_area: 500
+          max_area: 24576
+          threshold: 0.80  # Only post if >= 80% confidence
+
+        car:
+          min_area: 500
+          threshold: 0.75
+
+        dog:
+          min_area: 200
+          threshold: 0.85
+
+    # Event duration before timeout (seconds)
+    event_duration: 30
+
+    # Snapshots for webhook delivery
+    snapshots:
+      enabled: true
+      path: /tmp/frigate/snapshots
+      # Critical: snapshots must be accessible via public URL
+      # Examples:
+      # - https://your-machine-name.ts.net (Tailscale Funnel)
+      # - https://frigate.example.com (reverse proxy)
+
+  # Example 2: Indoor camera - route low-confidence to analysis
+  living_room:
+    ffmpeg:
+      inputs:
+        - path: rtsp://user:pass@192.168.1.101/stream
+          roles:
+            - detect
+            - record
+
+    objects:
+      track:
+        - person
+        - cat
+      filters:
+        person:
+          threshold: 0.70  # Lower threshold triggers more analysis
+        cat:
+          threshold: 0.60
+
+    snapshots:
+      enabled: true
+      path: /tmp/frigate/snapshots
+
+# ============================================================================
+# NOTIFICATION ROUTING LOGIC (Pseudocode)
+# ============================================================================
+#
+# Frigate's native notification system has limitations. To achieve
+# proper dual-webhook routing, you have two options:
+#
+# OPTION A: Use Frigate's built-in Go template system (if available)
+# OPTION B: Use an external script/webhook forwarder
+# OPTION C: Post to both webhooks and let each filter based on payload
+#
+# Example OPTION C approach (shown below):
+
+# Post every motion event to Clawdbot, which will:
+# 1. Receive the event payload
+# 2. Check confidence via mapping condition
+# 3. Route high-confidence to Discord directly
+# 4. Route low-confidence for analysis
+
+# ============================================================================
+# WEBHOOK PAYLOAD TEMPLATES
+# ============================================================================
+#
+# Frigate sends event data in the request body. The format depends on
+# the `type` field (webhook, MQTT, etc.).
+#
+# Standard Frigate webhook payload for a detection event:
+#
+# {
+#   "type": "object",
+#   "before": {
+#     "box": [...],
+#     "region": [...],
+#     "score": 0.85
+#   },
+#   "after": {
+#     "box": [...],
+#     "region": [...],
+#     "score": 0.90
+#   },
+#   "frame_time": 1705339425.123,
+#   "trigger": "person",
+#   "camera_name": "front_door",
+#   "snapshot_path": "/tmp/frigate/snapshots/front_door-1705339425.123.jpg"
+# }
+#
+# Enrich this with custom script or mapping in Clawdbot.
+
+# ============================================================================
+# INTEGRATION: CLAWDBOT HOOK MAPPING
+# ============================================================================
+#
+# Clawdbot config (~/.clawdbot/clawdbot.json) should include:
+#
+# {
+#   "hooks": {
+#     "enabled": true,
+#     "token": "a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
+#     "path": "/hooks",
+#
+#     "mappings": [
+#       {
+#         "id": "frigate-person-high",
+#         "match": {
+#           "path": "frigate",
+#           "source": "person"
+#         },
+#         "action": "wake",
+#         "wakeMode": "now",
+#         "name": "Frigate: High-Confidence Person"
+#       },
+#       {
+#         "id": "frigate-person-low",
+#         "match": {
+#           "path": "frigate",
+#           "source": "person"
+#         },
+#         "action": "agent",
+#         "name": "Frigate: Analyze Low-Confidence",
+#         "messageTemplate": "Motion detected on {{camera_name}}: {{trigger}}. Confidence: {{score}}%. Snapshot: {{snapshot_url}}",
+#         "deliver": true,
+#         "provider": "discord",
+#         "to": "channel:motion-analysis"
+#       }
+#     ]
+#   }
+# }
+#
+# See webhook-setup-guide.md Part B for full mapping documentation.
+
+# ============================================================================
+# ADVANCED: WEBHOOK FORWARDER SCRIPT
+# ============================================================================
+#
+# If Frigate's native routing is insufficient, use a webhook forwarder:
+#
+# 1. Frigate posts to: http://localhost:9999/frigate
+# 2. Forwarder script processes payload
+# 3. Routes to Discord (high-conf) or Clawdbot (low-conf)
+#
+# Pseudocode (Node.js):
+#
+# import express from 'express';
+#
+# const app = express();
+# app.use(express.json());
+#
+# app.post('/frigate', async (req, res) => {
+#   const event = req.body;
+#
+#   if (event.after.score > 0.80) {
+#     // High confidence: send to Discord directly
+#     await fetch('https://discord.com/api/webhooks/.../...', {
+#       method: 'POST',
+#       headers: { 'Content-Type': 'application/json' },
+#       body: JSON.stringify({
+#         username: 'Frigate Motion',
+#         embeds: [{
+#           title: `${event.trigger} Detected`,
+#           description: event.camera_name,
+#           fields: [
+#             { name: 'Confidence', value: `${Math.round(event.after.score * 100)}%` },
+#             { name: 'Camera', value: event.camera_name }
+#           ],
+#           image: { url: `https://your-frigate.ts.net/api/events/...` }
+#         }]
+#       })
+#     });
+#   } else {
+#     // Low confidence: send to Clawdbot for analysis
+#     await fetch('http://localhost:18789/hooks/frigate', {
+#       method: 'POST',
+#       headers: {
+#         'Content-Type': 'application/json',
+#         'Authorization': 'Bearer TOKEN'
+#       },
+#       body: JSON.stringify(event)
+#     });
+#   }
+#
+#   res.status(200).send('OK');
+# });
+#
+# app.listen(9999, () => console.log('Forwarder listening on 9999'));
+#
+# Then in frigate notifications, point to: http://localhost:9999/frigate
+
+# ============================================================================
+# RECORDING & RETENTION
+# ============================================================================
+record:
+  enabled: true
+  retain:
+    default: 7        # Keep 7 days of general recording
+    motion: 14        # Keep 14 days if motion detected
+
+# Database location
+database:
+  path: /mnt/frigate/frigate.db
+
+# ============================================================================
+# OPTIONAL: MQTT (Alternative Event Publishing)
+# ============================================================================
+# If using MQTT instead of webhooks, enable this:
+#
+# mqtt:
+#   enabled: true
+#   host: 192.168.1.50
+#   port: 1883
+#   topic_prefix: frigate
+#
+# Then subscribe with:
+#   mosquitto_sub -h 192.168.1.50 -t "frigate/#"
+#
+# Route MQTT messages to Discord/Clawdbot with a separate forwarder.
+
+# ============================================================================
+# TESTING CHECKLIST
+# ============================================================================
+#
+# 1. [ ] Verify Frigate can reach Discord webhook:
+#        curl -X POST "https://discord.com/api/webhooks/..." \
+#          -H 'Content-Type: application/json' \
+#          -d '{"content":"Frigate test"}'
+#
+# 2. [ ] Verify Frigate can reach Clawdbot webhook:
+#        curl -X POST "http://localhost:18789/hooks/frigate" \
+#          -H 'Authorization: Bearer TOKEN' \
+#          -d '{"test": "payload"}'
+#
+# 3. [ ] Verify snapshots are publicly accessible:
+#        curl -I "https://your-machine-name.ts.net/api/events/ID/snapshot.jpg"
+#        Should return 200 OK
+#
+# 4. [ ] Trigger a motion event and verify:
+#        - High-confidence person appears in Discord channel
+#        - Low-confidence appears in Clawdbot analysis channel
+#
+# 5. [ ] Check Frigate logs for any webhook errors:
+#        docker logs frigate 2>&1 | grep -i webhook
+#
+# 6. [ ] Check Clawdbot logs for webhook receives:
+#        tail -f ~/.clawdbot/gateway.log | grep hook

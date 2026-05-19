@@ -1,0 +1,10 @@
+{
+  "frigate": {
+    "command": "node",
+    "args": ["/home/admin/l36/mcp-services/frigate-mcp/dist/index.js"],
+    "env": {
+      "FRIGATE_URL": "http://192.168.1.100:5000",
+      "FRIGATE_API_KEY": ""
+    }
+  }
+}

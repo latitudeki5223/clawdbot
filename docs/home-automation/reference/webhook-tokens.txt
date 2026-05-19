@@ -1,0 +1,430 @@
+================================================================================
+WEBHOOK TOKEN GENERATION & SECURE STORAGE GUIDE
+================================================================================
+
+This document covers:
+1. Generating secure tokens for webhook authentication
+2. Storing tokens safely
+3. Token rotation procedures
+4. Security best practices
+
+================================================================================
+PART 1: TOKEN GENERATION
+================================================================================
+
+A secure webhook token should be:
+- Cryptographically random (not derived from passwords or names)
+- At least 32 bytes (256 bits) of entropy
+- Stored securely (not in git, config files without restricted permissions)
+- Rotated regularly (quarterly or after staff changes)
+
+METHOD 1: OpenSSL (Recommended - Available on Most Systems)
+================================================================================
+
+Generate a 32-byte (256-bit) token:
+
+  openssl rand -hex 32
+
+Example output:
+  a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
+
+Generate a shorter 16-byte (128-bit) token:
+
+  openssl rand -hex 16
+
+Example output:
+  8a7f3e2c1d9b4a6f5e3c2d1b0a9f8e7d
+
+Copy the output and use it for:
+- FRIGATE_WEBHOOK_TOKEN environment variable
+- Clawdbot hooks.token config value
+- Custom webhook authorization header
+
+METHOD 2: Node.js (If Node Available)
+================================================================================
+
+Create a file (e.g., generate-token.js):
+
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(32).toString('hex');
+  console.log(token);
+
+Run:
+  node generate-token.js
+
+Or one-liner:
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+METHOD 3: Python (If Python Available)
+================================================================================
+
+One-liner:
+  python3 -c "import secrets; print(secrets.token_hex(32))"
+
+Or create a script (generate-token.py):
+
+  import secrets
+  token = secrets.token_hex(32)
+  print(f"Token: {token}")
+  print(f"Length: {len(token)} characters ({len(token)//2} bytes)")
+
+METHOD 4: Bash /dev/urandom (Cross-Platform)
+================================================================================
+
+If OpenSSL not available:
+
+  head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '='
+
+Or to get hex encoding:
+
+  od -An -tx1 -N32 /dev/urandom | tr -d ' '
+
+Note: Base64 is shorter but hexadecimal is more portable.
+
+================================================================================
+PART 2: TOKEN STORAGE STRATEGIES
+================================================================================
+
+STRATEGY A: Environment Variables (Recommended for Servers)
+================================================================================
+
+For Clawdbot:
+
+  export CLAWDBOT_HOOK_TOKEN="a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+
+For Frigate (if using webhooks):
+
+  export FRIGATE_WEBHOOK_TOKEN="8a7f3e2c1d9b4a6f5e3c2d1b0a9f8e7d"
+
+Add to shell startup file for persistence:
+
+  # ~/.bashrc or ~/.bash_profile
+  export CLAWDBOT_HOOK_TOKEN="a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+
+STRATEGY B: .env File (Local Development Only)
+================================================================================
+
+Create ~/.frigate/.env:
+
+  FRIGATE_WEBHOOK_TOKEN=8a7f3e2c1d9b4a6f5e3c2d1b0a9f8e7d
+  CLAWDBOT_HOOK_TOKEN=a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
+
+Secure the file:
+
+  chmod 600 ~/.frigate/.env
+
+Load variables:
+
+  source ~/.frigate/.env
+  # or via systemd: EnvironmentFile=~/.frigate/.env
+
+WARNING: Never commit .env files to git. Add to .gitignore:
+
+  echo ".env" >> .gitignore
+  echo "*.env" >> .gitignore
+
+STRATEGY C: Separate Credentials File (Recommended for Production)
+================================================================================
+
+Create secured directory:
+
+  mkdir -p ~/.clawdbot/credentials
+  chmod 700 ~/.clawdbot/credentials
+
+Create token file:
+
+  cat > ~/.clawdbot/credentials/webhook-tokens.txt << 'EOF'
+  # Webhook Tokens
+  # Format: name=token
+  # Keep this file secure: chmod 600
+
+  frigate_webhook_token=a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
+  clawdbot_hook_token=8a7f3e2c1d9b4a6f5e3c2d1b0a9f8e7d
+  frigate_discord_webhook=https://discord.com/api/webhooks/1234567890123456789/abcdefghijklmnopqrstuvwxyz_TOKEN
+  EOF
+
+Secure the file:
+
+  chmod 600 ~/.clawdbot/credentials/webhook-tokens.txt
+
+Source in startup scripts:
+
+  source ~/.clawdbot/credentials/webhook-tokens.txt
+
+STRATEGY D: systemd Secret Files (Enterprise)
+================================================================================
+
+For systemd services, use protected files:
+
+  # /etc/systemd/system/clawdbot.service
+  [Service]
+  Type=simple
+  ExecStart=/usr/local/bin/clawdbot gateway
+  Environment="CLAWDBOT_HOOK_TOKEN=%d/webhook-token"
+
+  [Install]
+  WantedBy=multi-user.target
+
+Create secret:
+
+  sudo mkdir -p /run/secrets
+  sudo bash -c 'echo -n "a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1" > /run/secrets/webhook-token'
+  sudo chmod 400 /run/secrets/webhook-token
+
+STRATEGY E: HashiCorp Vault (Advanced)
+================================================================================
+
+For large deployments, use Vault:
+
+1. Seal the secret:
+
+   vault write secret/frigate/webhooks \
+     token="a3f7e2c1b9d8f4a6c7e9f1d2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+
+2. Retrieve at runtime:
+
+   export CLAWDBOT_HOOK_TOKEN=$(vault read -field=token secret/frigate/webhooks)
+
+3. Configure auto-renewal in services.
+
+================================================================================
+PART 3: TOKEN ROTATION PROCEDURE
+================================================================================
+
+Rotations should be done quarterly or after:
+- Staff changes
+- Security audit findings
+- Suspected compromise
+- Permission policy updates
+
+STEP-BY-STEP ROTATION:
+================================================================================
+
+1. GENERATE NEW TOKEN
+
+   NEW_TOKEN=$(openssl rand -hex 32)
+   echo "New token: $NEW_TOKEN"
+
+2. UPDATE CLAWDBOT CONFIG
+
+   # Edit ~/.clawdbot/clawdbot.json
+   {
+     "hooks": {
+       "token": "NEW_TOKEN_HERE"
+     }
+   }
+
+3. UPDATE FRIGATE CONFIGURATION (IF APPLICABLE)
+
+   # If using custom Frigate webhook header:
+   # Edit frigate config or environment variable
+   export FRIGATE_WEBHOOK_TOKEN="NEW_TOKEN_HERE"
+
+4. RESTART CLAWDBOT GATEWAY
+
+   clawdbot gateway --force
+
+   # Verify startup:
+   sleep 5
+   curl -X POST http://localhost:18789/hooks/test \
+     -H "Authorization: Bearer $NEW_TOKEN" \
+     -d '{"test": "verify rotation"}'
+
+5. UPDATE FIREWALL/PROXY RULES (IF APPLICABLE)
+
+   # If webhook URLs are logged or filtered:
+   # Update any proxy auth configurations
+
+6. DOCUMENT ROTATION
+
+   Log the rotation event:
+
+   cat >> ~/.frigate/audit.log << EOF
+   [$(date -Iseconds)] Token rotation completed
+   Component: Frigate webhooks
+   New token generated by: $(whoami)
+   EOF
+
+7. COMMUNICATE TO TEAM
+
+   Notify team members that:
+   - Old token is invalidated
+   - New token is in effect
+   - No further action needed on their part
+
+8. REMOVE OLD TOKEN
+
+   # After verification period (1-2 weeks), delete old token reference:
+   rm -f ~/.frigate/old-tokens.txt
+
+VERIFY AFTER ROTATION:
+================================================================================
+
+Test webhook connectivity with new token:
+
+  curl -X POST http://localhost:18789/hooks/frigate \
+    -H "Authorization: Bearer $(echo 'NEW_TOKEN')" \
+    -H "Content-Type: application/json" \
+    -d '{"test": "webhook", "status": "active"}'
+
+Expected response: 202 Accepted
+
+Check logs for errors:
+
+  tail -f ~/.clawdbot/gateway.log | grep -E "auth|hook|token"
+
+================================================================================
+PART 4: SECURITY BEST PRACTICES
+================================================================================
+
+DO's:
+  [✓] Use cryptographically random generation (openssl rand)
+  [✓] Store in environment variables or secured files (chmod 600)
+  [✓] Rotate quarterly
+  [✓] Use HTTPS/TLS for all webhook transmission
+  [✓] Log token usage (rotation events only, not the token itself)
+  [✓] Use different tokens for different integrations (frigate vs custom)
+  [✓] Restrict file permissions: chmod 600 for credential files
+  [✓] Consider using systemd secrets or Vault for sensitive environments
+
+DON'Ts:
+  [✗] Never hardcode tokens in source code
+  [✗] Never commit tokens to git repositories
+  [✗] Never send tokens in plain HTTP (always use HTTPS)
+  [✗] Never reuse tokens across unrelated services
+  [✗] Never log or display tokens in logs
+  [✗] Never email tokens or use chat for sharing
+  [✗] Never use predictable values (dates, names, sequences)
+  [✗] Don't store tokens in world-readable files
+
+Token Sharing (When Unavoidable):
+  - Use a secure password manager (1Password, Bitwarden, LastPass)
+  - Share via encrypted channel (Signal, PGP-encrypted email)
+  - Include rotation date and expiration
+  - Log who accessed the token
+  - Rotate immediately after access by authorized party
+
+================================================================================
+PART 5: TOKEN AUDITING & COMPLIANCE
+================================================================================
+
+AUDIT CHECKLIST:
+
+1. Verify all tokens are environment variables or encrypted:
+
+   grep -r "token.*=" ~/.clawdbot/ | grep -v "Bearer" | head -5
+   # Should be empty or only show config file paths
+
+2. Check file permissions on credential files:
+
+   ls -la ~/.clawdbot/credentials/
+   # Should show: -rw------- (600) for sensitive files
+
+3. Review rotation history:
+
+   grep "rotation\|rotated" ~/.frigate/audit.log
+   # Should show regular quarterly rotations
+
+4. Audit token usage logs (if available):
+
+   journalctl -u clawdbot | grep "hook\|webhook" | tail -50
+
+COMPLIANCE NOTES:
+
+- SOC 2: Tokens should rotate quarterly and logs should be auditable
+- HIPAA: If handling health data, tokens must be encrypted at rest
+- PCI-DSS: If handling payment data, tokens need dedicated vaults
+- GDPR: Document where tokens are stored and who has access
+
+================================================================================
+PART 6: EMERGENCY TOKEN REVOCATION
+================================================================================
+
+If you suspect a token is compromised:
+
+IMMEDIATE ACTIONS:
+
+1. Generate new token:
+   NEW_TOKEN=$(openssl rand -hex 32)
+
+2. Update config:
+   # Edit ~/.clawdbot/clawdbot.json with NEW_TOKEN
+
+3. Restart gateway:
+   clawdbot gateway --force
+
+4. Verify new token works:
+   curl -X POST http://localhost:18789/hooks/test \
+     -H "Authorization: Bearer $NEW_TOKEN" \
+     -d '{"test": "data"}'
+
+5. Check for unauthorized access:
+   tail -100 ~/.clawdbot/gateway.log | grep "webhook\|hook\|401\|403"
+
+6. Document incident:
+   echo "[$(date)] SECURITY: Token revoked due to suspected compromise" \
+     >> ~/.frigate/audit.log
+
+FORENSICS (Optional):
+
+- Check for unusual webhook delivery patterns
+- Review Clawdbot session logs for suspicious agent runs
+- Check Discord/messaging delivery logs for unexpected messages
+- Query Frigate event logs for anomalies
+
+================================================================================
+APPENDIX: TOKEN TEMPLATES
+================================================================================
+
+Template for storing multiple tokens securely:
+
+  cat > ~/.clawdbot/credentials/.tokens << 'EOF'
+  # Webhook Tokens - DO NOT COMMIT
+  # Generated: 2024-01-15
+  # Next rotation: 2024-04-15
+
+  SERVICE=frigate_webhook
+  TOKEN=$(openssl rand -hex 32)
+  DESCRIPTION="Frigate motion detection webhook"
+  CREATED=$(date -Iseconds)
+  EXPIRES=$(date -Iseconds -d '+90 days')
+
+  SERVICE=clawdbot_hook
+  TOKEN=$(openssl rand -hex 32)
+  DESCRIPTION="Clawdbot gateway webhook token"
+  CREATED=$(date -Iseconds)
+  EXPIRES=$(date -Iseconds -d '+90 days')
+  EOF
+
+  chmod 600 ~/.clawdbot/credentials/.tokens
+
+Template for shared/temporary tokens (short-lived):
+
+  # Generate token with 24-hour lifespan
+  TOKEN=$(openssl rand -hex 32)
+  EXPIRES=$(date -d '+24 hours' +%s)
+
+  # Share token with expiration:
+  echo "Token: $TOKEN"
+  echo "Expires: $(date -d @$EXPIRES)"
+  echo "Do not share this beyond the specified time."
+
+Template for audit logging:
+
+  cat > ~/.frigate/audit-template.log << 'EOF'
+  [TIMESTAMP] [ACTION] [USER] [SERVICE] [STATUS] [NOTES]
+  [2024-01-15T14:23:45Z] [GENERATE] [admin] [frigate_webhook] [SUCCESS] [Quarterly rotation]
+  [2024-01-15T14:24:12Z] [UPDATE] [automation] [clawdbot] [SUCCESS] [Config reload]
+  [2024-01-15T14:25:00Z] [VERIFY] [admin] [webhook_test] [SUCCESS] [Connected via new token]
+  [2024-01-15T15:30:22Z] [REVOKE] [security] [frigate_webhook] [SUCCESS] [Suspected compromise]
+  EOF
+
+================================================================================
+END OF TOKEN GUIDE
+================================================================================
+
+For more information:
+- OpenSSL docs: https://www.openssl.org/docs/
+- systemd docs: https://www.freedesktop.org/software/systemd/man/
+- HashiCorp Vault: https://www.vaultproject.io/docs
+- Clawdbot webhook docs: https://docs.clawd.bot/automation/webhook
