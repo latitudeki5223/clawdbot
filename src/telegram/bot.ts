@@ -3,6 +3,8 @@ import { sequentialize } from "@grammyjs/runner";
 import { apiThrottler } from "@grammyjs/transformer-throttler";
 import type { ApiClientOptions, Message } from "grammy";
 import { Bot, InputFile, webhookCallback } from "grammy";
+import { handleAgentApprovalCallback, isAgentApprovalCallback } from "./agent-approval.js";
+import { handleSocialApprovalCallback, isSocialApprovalCallback } from "./social-approval.js";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import {
   resolveAckReaction,
@@ -1162,6 +1164,18 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       const data = (callback.data ?? "").trim();
       const callbackMessage = callback.message;
       if (!data || !callbackMessage) return;
+
+      // L36 social post approval — handle before agent pipeline
+      if (isSocialApprovalCallback(data)) {
+        await handleSocialApprovalCallback(bot, callback, data);
+        return;
+      }
+
+      // L36 agent task approval (Max learning-loop / agent-board)
+      if (isAgentApprovalCallback(data)) {
+        await handleAgentApprovalCallback(bot, callback, data);
+        return;
+      }
 
       const syntheticMessage: TelegramMessage = {
         ...callbackMessage,
