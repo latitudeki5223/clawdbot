@@ -11,6 +11,30 @@ import { applyTemplate, type MsgContext } from "./templating.js";
 
 const AUDIO_TRANSCRIPTION_BINARY = "whisper";
 
+const WORKSHOP_VOICE_DIR =
+  process.env.WORKSHOP_VOICE_DIR ?? path.join(os.homedir(), "voice-incoming");
+
+async function persistVoiceMemoToWorkshop(
+  sourcePath: string,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  try {
+    await fs.mkdir(WORKSHOP_VOICE_DIR, { recursive: true });
+    const ext = path.extname(sourcePath) || ".ogg";
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const dest = path.join(
+      WORKSHOP_VOICE_DIR,
+      `telegram-${stamp}-${crypto.randomUUID().slice(0, 8)}${ext}`,
+    );
+    await fs.copyFile(sourcePath, dest);
+    if (shouldLogVerbose()) {
+      logVerbose(`Persisted voice memo for Workshop OS: ${dest}`);
+    }
+  } catch (err) {
+    runtime.log?.(`Workshop voice-memo persist failed: ${String(err)}`);
+  }
+}
+
 export function isAudio(mediaType?: string | null) {
   return Boolean(mediaType?.startsWith("audio"));
 }
@@ -77,6 +101,7 @@ export async function transcribeInboundAudio(
     });
     const text = stdout.trim();
     if (!text) return undefined;
+    await persistVoiceMemoToWorkshop(mediaPath, runtime);
     return { text };
   } catch (err) {
     runtime.error?.(`Audio transcription failed: ${String(err)}`);
