@@ -393,6 +393,10 @@ function syncExternalCliCredentials(
   let mutated = false;
   const now = Date.now();
 
+  // DISABLED: Anthropic OAuth sync - using MiniMax API only
+  // Claude CLI sync commented out to prevent auto-importing Anthropic OAuth profiles
+  // To re-enable: uncomment the block below
+  /*
   // Sync from Claude CLI (supports both OAuth and Token credentials)
   const existingClaude = store.profiles[CLAUDE_CLI_PROFILE_ID];
   const shouldSyncClaude =
@@ -463,6 +467,7 @@ function syncExternalCliCredentials(
       });
     }
   }
+  */
 
   // Sync from Codex CLI
   const existingCodex = store.profiles[CODEX_CLI_PROFILE_ID];
