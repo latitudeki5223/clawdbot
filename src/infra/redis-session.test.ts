@@ -11,7 +11,7 @@ interface MockClient {
   set: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
   expireat: ReturnType<typeof vi.fn>;
-  close: ReturnType<typeof vi.fn>;
+  quit: ReturnType<typeof vi.fn>;
 }
 
 function makeMock(): MockClient {
@@ -19,7 +19,7 @@ function makeMock(): MockClient {
     set: vi.fn().mockResolvedValue("OK"),
     get: vi.fn().mockResolvedValue(null),
     expireat: vi.fn().mockResolvedValue(1),
-    close: vi.fn(),
+    quit: vi.fn().mockResolvedValue("OK"),
   };
 }
 
@@ -92,11 +92,11 @@ describe("getSessionResult", () => {
 });
 
 describe("closeRedis", () => {
-  it("calls close on the client", () => {
+  it("calls quit on the client", () => {
     const mock = makeMock();
     _setClientForTesting(mock);
     closeRedis();
-    expect(mock.close).toHaveBeenCalledOnce();
+    expect(mock.quit).toHaveBeenCalledOnce();
   });
 
   it("resets internal client to null so next call reinitialises", () => {
