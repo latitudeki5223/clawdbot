@@ -1,6 +1,7 @@
 import { loadConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { onAgentEvent } from "../infra/agent-events.js";
+import { saveSessionResult } from "../infra/redis-session.js";
 import { runSubagentAnnounceFlow } from "./subagent-announce.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
 
@@ -187,6 +188,10 @@ async function waitForSubagentCompletion(runId: string, waitTimeoutMs: number) {
     if (typeof wait.endedAt === "number") entry.endedAt = wait.endedAt;
     if (!entry.endedAt) entry.endedAt = Date.now();
     if (!beginSubagentAnnounce(runId)) return;
+
+    // Save agent result to Redis before announcing
+    saveAgentResultToRedis(entry);
+
     void runSubagentAnnounceFlow({
       childSessionKey: entry.childSessionKey,
       childRunId: entry.runId,
@@ -217,4 +222,32 @@ export function resetSubagentRegistryForTests() {
 export function releaseSubagentRun(runId: string) {
   subagentRuns.delete(runId);
   if (subagentRuns.size === 0) stopSweeper();
+}
+
+async function saveAgentResultToRedis(entry: any): Promise<void> {
+  try {
+    // Read last 50 lines of session transcript for context
+    const sessionFile = `/home/admin/.clawdbot/agents/main/sessions/${entry.childSessionKey.replace(/:/g, "_")}.jsonl`;
+    let result = "";
+    try {
+      const { readFileSync, existsSync } = await import("fs");
+      if (existsSync(sessionFile)) {
+        result = readFileSync(sessionFile, "utf-8").split("\n").slice(-50).join("\n");
+      }
+    } catch {
+      result = `Agent completed (childSessionKey: ${entry.childSessionKey})`;
+    }
+
+    const parts = (entry.childSessionKey as string).split(":");
+    const agentId = parts[0] ?? "subagent";
+    const contextId = parts.slice(1).join(":") || "result";
+    await saveSessionResult(agentId, contextId, {
+      result: result.slice(0, 10000),
+      task: entry.task?.slice(0, 500) ?? "",
+      capturedAt: new Date().toISOString(),
+    });
+    console.log("[SubagentRegistry] Redis save:", entry.childSessionKey);
+  } catch (err) {
+    console.error("[SubagentRegistry] Redis save error:", err);
+  }
 }

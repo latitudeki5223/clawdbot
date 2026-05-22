@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { saveSessionResult } from "../infra/redis-session.js";
 import {
   resolveAgentConfig,
   resolveAgentWorkspaceDir,
@@ -590,11 +591,27 @@ export async function runCronIsolatedAgentTurn(params: {
       });
     } catch (err) {
       if (!bestEffortDeliver) {
+        void saveToRedis(params.sessionKey ?? `cron-${Date.now()}`, summary ?? "");
         return { status: "error", summary, error: String(err) };
       }
+      void saveToRedis(params.sessionKey ?? `cron-${Date.now()}`, summary ?? "");
       return { status: "ok", summary };
     }
   }
 
+  void saveToRedis(params.sessionKey ?? `cron-${Date.now()}`, summary ?? "");
   return { status: "ok", summary };
+}
+
+async function saveToRedis(sessionKey: string | undefined, result: string): Promise<void> {
+  const key = sessionKey ?? `cron-${Date.now()}`;
+  const parts = key.split(":");
+  const agentId = parts[0] ?? "cron";
+  const contextId = parts.slice(1).join(":") || "result";
+  try {
+    await saveSessionResult(agentId, contextId, { result, timestamp: Date.now() });
+    console.log("[IsolatedAgent] Redis save:", key);
+  } catch (err) {
+    console.error("[IsolatedAgent] Redis save error:", err);
+  }
 }
