@@ -107,6 +107,20 @@
   - launchd PATH is minimal; ensure the app’s launch agent PATH includes standard system paths plus your pnpm bin (typically `$HOME/Library/pnpm`) so `pnpm`/`clawdbot` binaries resolve when invoked via `clawdbot-mac`.
 - For manual `clawdbot message send` messages that include `!`, use the heredoc pattern noted below to avoid the Bash tool’s escaping.
 
+## Connected Systems — L36 Foreman
+
+The Foreman is an isolated-session cron skill loaded from `/home/admin/clawd/skills/foreman/`. It runs once per morning (06:00 AEDT) to read L36 business state and post 0–3 approval proposals to Tony via Telegram. Treat it like Daily/Weekly Review Nudge — a self-contained job, not a conversation surface.
+
+- **Skill path:** `/home/admin/clawd/skills/foreman/` (auto-discovered by skill loader)
+- **Cron job name:** `Foreman daily brief` (schedule `0 6 * * *` @ Australia/Adelaide, isolated session)
+- **Delivery:** the cron itself runs *without* `--deliver`. The Telegram message Tony sees is the *L36 notification's* outbound message, posted by L36 with `[✅ Approve] [🔁 Revise]` buttons. The cron's text output is an audit trail only.
+- **Quiet-day pattern:** Foreman returns the literal token `HEARTBEAT_OK` when nothing fires. The isolated-agent heartbeat suppression (`src/cron/isolated-agent.ts`) already handles this — no extra wiring.
+- **Approval loop:** Tony taps Approve in Telegram → existing `agent_approve:` handler (`src/telegram/agent-approval.ts`) POSTs `/api/notifications/{id}/action` on L36 → L36 fires `metadata.callback_url` (`/api/foreman/approved`) → kanban card created with `iteration_state.source="foreman"`. **No ClawdBot code change required for the approval loop.**
+- **What it proposes:** stock reorders (the gap case + urgency overlay), X threads, seasonal campaigns, blog posts, quiet-week observations. Full catalogue in `references/event_catalogue.md` inside the skill.
+- **When Tony asks Max about Foreman:** read the skill files directly (`SKILL.md` + `references/`) rather than guessing. Recent fires are in `~/.clawdbot/cron/runs/<jobId>.jsonl` — query with `clawdbot cron runs --id <jobId>`.
+- **Don't run the Foreman skill from a normal chat session.** It's cron-only. Ad-hoc business questions from Tony go through the regular MCP tools (`mcp__builds__*`, `mcp__products__*`, `mcp__productivity__*`), not by invoking the Foreman skill.
+- **Telegram target is hardcoded:** L36 Command Center `-1003223891796`, General topic id `7`. Don't deliver Foreman content anywhere else.
+
 ## Exclamation Mark Escaping Workaround
 The Claude Code Bash tool escapes `!` to `\\!` in command arguments. When using `clawdbot message send` with messages containing exclamation marks, use heredoc syntax:
 

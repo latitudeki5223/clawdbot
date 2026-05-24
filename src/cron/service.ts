@@ -508,10 +508,13 @@ export class CronService {
       if (job.sessionTarget === "isolated") {
         const prefix = job.isolation?.postToMainPrefix?.trim() || "Cron";
         const body = (summary ?? err ?? status).trim();
-        const statusPrefix = status === "ok" ? prefix : `${prefix} (${status})`;
-        this.deps.enqueueSystemEvent(`${statusPrefix}: ${body}`, {
-          agentId: job.agentId,
-        });
+        // Only inject into main session when there's a real summary — bare "ok"/"skipped" is noise
+        if (body !== "ok" && body !== "skipped") {
+          const statusPrefix = status === "ok" ? prefix : `${prefix} (${status})`;
+          this.deps.enqueueSystemEvent(`${statusPrefix}: ${body}`, {
+            agentId: job.agentId,
+          });
+        }
         if (job.wakeMode === "now") {
           this.deps.requestHeartbeatNow({ reason: `cron:${job.id}:post` });
         }

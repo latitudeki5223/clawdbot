@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SessionManager } from "@mariozechner/pi-coding-agent";
 
+import { redactAgentMessage } from "../logging/redact-message.js";
 import { makeMissingToolResult } from "./session-transcript-repair.js";
 
 type ToolCall = { id: string; name?: string };
@@ -44,7 +45,9 @@ export function installSessionToolResultGuard(sessionManager: SessionManager): {
   flushPendingToolResults: () => void;
   getPendingIds: () => string[];
 } {
-  const originalAppend = sessionManager.appendMessage.bind(sessionManager);
+  const rawAppend = sessionManager.appendMessage.bind(sessionManager);
+  const originalAppend = ((message: AgentMessage) =>
+    rawAppend(redactAgentMessage(message) as never)) as typeof rawAppend;
   const pending = new Map<string, string | undefined>();
 
   const flushPendingToolResults = () => {

@@ -126,6 +126,45 @@ describe("installSessionToolResultGuard", () => {
     expect(guard.getPendingIds()).toEqual([]);
   });
 
+  it("redacts secrets in persisted toolResult content + details", () => {
+    const sm = SessionManager.inMemory();
+    installSessionToolResultGuard(sm);
+
+    sm.appendMessage({
+      role: "assistant",
+      content: [{ type: "toolUse", id: "use_x", name: "exec", arguments: {} }],
+    } as AgentMessage);
+    sm.appendMessage({
+      role: "toolResult",
+      toolUseId: "use_x",
+      content: [
+        {
+          type: "text",
+          text: "PERPLEXITY_API_KEY=pplx-fakefakefakefakefakefakefakefakefakefakefakefake",
+        },
+      ],
+      details: {
+        aggregated: "OPENAI_API_KEY=sk-proj-1234567890abcdefghij",
+      },
+    } as AgentMessage);
+
+    const result = sm
+      .getEntries()
+      .filter((e) => e.type === "message")
+      .map((e) => (e as { message: AgentMessage }).message)
+      .find((m) => m.role === "toolResult") as {
+      content?: Array<{ text?: string }>;
+      details?: { aggregated?: string };
+    };
+
+    expect(result.content?.[0]?.text).not.toContain(
+      "pplx-fakefakefakefakefakefakefakefakefakefakefakefake",
+    );
+    expect(result.details?.aggregated).not.toContain(
+      "sk-proj-1234567890abcdefghij",
+    );
+  });
+
   it("handles toolUseId on toolResult", () => {
     const sm = SessionManager.inMemory();
     installSessionToolResultGuard(sm);
